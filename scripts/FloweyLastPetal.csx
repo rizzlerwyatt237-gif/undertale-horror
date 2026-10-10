@@ -3,7 +3,7 @@ using System.Linq;
 
 // UNDERTALE: FLOWEY // LAST PETAL
 // Run this script in UndertaleModTool with Undertale's data.win loaded.
-// The script intentionally edits only resources whose names contain "flowey".
+// It patches only Flowey-related code and never ships Undertale's original data.win.
 
 void Log(string text)
 {
@@ -47,24 +47,9 @@ if (controller == null)
     controller = UndertaleModLib.Models.UndertaleCode.CreateEmptyEntry(Data, controllerName);
     controller.ReplaceGML(@"
 // FLOWEY // LAST PETAL
-// This controller deliberately uses ordinary GML so it can run on the original game.
+// Called from Flowey's Step event.
 
-if (!variable_global_exists("last_petal_horror"))
-    global.last_petal_horror = 0;
-
-if (!variable_instance_exists(id, "last_petal_timer"))
-    last_petal_timer = 0;
-
-if (!variable_instance_exists(id, "last_petal_original_xscale"))
-    last_petal_original_xscale = image_xscale;
-
-if (!variable_instance_exists(id, "last_petal_original_yscale"))
-    last_petal_original_yscale = image_yscale;
-
-global.last_petal_horror = min(global.last_petal_horror + 1, 12);
-last_petal_timer = max(last_petal_timer, room_speed * 2);
-
-// The longer Flowey is around, the less stable he looks.
+// The visual corruption grows as the player keeps encountering Flowey.
 if (global.last_petal_horror >= 3)
 {
     image_angle = choose(0, 0, 0, 180);
@@ -85,7 +70,6 @@ else
 
 if (global.last_petal_horror >= 9 && irandom(90) == 0)
 {
-    // A rare visual glitch: Flowey freezes for a moment instead of animating normally.
     image_speed = 0;
 }
 else
@@ -104,7 +88,14 @@ string stepName = FindCodeName("flowey", "Step_0");
 if (createName != null)
 {
     var createCode = Data.Code.ByName(createName);
-    Prepend(createCode, "global.last_petal_horror = 0;\nflowey_last_petal_controller();");
+    Prepend(createCode, @"
+if (!variable_global_exists("last_petal_horror"))
+    global.last_petal_horror = 0;
+
+global.last_petal_horror = min(global.last_petal_horror + 1, 12);
+last_petal_original_xscale = image_xscale;
+last_petal_original_yscale = image_yscale;
+flowey_last_petal_controller();");
     Log("Patched Flowey Create: " + createName);
 }
 else
@@ -123,14 +114,9 @@ else
     Log("WARNING: no Flowey Step event was found. No Step event was changed.");
 }
 
-// Add a global initialization entry for the controller script if needed.
-if (Data.GlobalInitScripts != null && !Data.GlobalInitScripts.Any(x => x?.Code?.Name?.Content == controllerName))
-{
-    Data.GlobalInitScripts.Add(new UndertaleModLib.Models.UndertaleGlobalInit
-    {
-        Code = controller
-    });
-    Log("Registered global init for the controller.");
-}
-
-ScriptMessage("FLOWEY // LAST PETAL installed.\n\nFlowey hooks: Create=" + (createName != null ? "FOUND" : "NOT FOUND") + ", Step=" + (stepName != null ? "FOUND" : "NOT FOUND") + "\n\nSave this as a new data.win and keep your original backup.");
+ScriptMessage(
+    "FLOWEY // LAST PETAL installed.\n\n" +
+    "Flowey Create: " + (createName != null ? "FOUND" : "NOT FOUND") + "\n" +
+    "Flowey Step: " + (stepName != null ? "FOUND" : "NOT FOUND") + "\n\n" +
+    "Save as a new data.win and keep your original backup."
+);
