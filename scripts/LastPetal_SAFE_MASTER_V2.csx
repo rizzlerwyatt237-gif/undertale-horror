@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using UndertaleModLib.Models;
 using UndertaleModLib.Compiler;
 
-// LAST PETAL SAFE MASTER V2
+// LAST PETAL SAFE MASTER V2 - FIXED
 // Rebuilds the old horror-state systems without the old Step-event hooks.
-// This keeps movement, dialogue rendering, rooms, and sprite transforms untouched.
+// Never reads an unqualified `kills` variable.
 
 EnsureDataLoaded();
 
@@ -37,7 +37,7 @@ foreach (UndertaleCode code in Data.Code)
 
 if (targets.Count == 0)
 {
-    ScriptError("SAFE MASTER V2: no supported character Create events were found. Nothing was changed.");
+    ScriptError("SAFE MASTER V2 FIXED: no supported character Create events were found. Nothing was changed.");
     return;
 }
 
@@ -52,11 +52,11 @@ foreach (UndertaleCode target in targets)
 {
     string existing = GetDecompiledText(target);
 
-    if (existing.Contains("// LAST PETAL SAFE MASTER V2 STATE"))
+    if (existing.Contains("// LAST PETAL SAFE MASTER V2 FIXED STATE"))
         continue;
 
     string patch =
-        "\n\n// LAST PETAL SAFE MASTER V2 STATE\n" +
+        "\n\n// LAST PETAL SAFE MASTER V2 FIXED STATE\n" +
         "if (!variable_global_exists(\"last_petal_memory\")) global.last_petal_memory = 0;\n" +
         "if (!variable_global_exists(\"last_petal_kills\")) global.last_petal_kills = 0;\n" +
         "if (!variable_global_exists(\"last_petal_horror\")) global.last_petal_horror = 0;\n" +
@@ -73,8 +73,8 @@ foreach (UndertaleCode target in targets)
         "if (!variable_global_exists(\"last_petal_chara_awareness\")) global.last_petal_chara_awareness = 0;\n" +
         "if (!variable_global_exists(\"last_petal_chara_mood\")) global.last_petal_chara_mood = 0;\n" +
         "\n" +
-        "if (variable_global_exists(\"kills\")) global.last_petal_kills = max(global.last_petal_kills, kills);\n" +
-        "if (variable_global_exists(\"killcount\")) global.last_petal_kills = max(global.last_petal_kills, killcount);\n" +
+        "// Only read the global kill counter when it exists.\n" +
+        "if (variable_global_exists(\"killcount\")) global.last_petal_kills = max(global.last_petal_kills, global.killcount);\n" +
         "\n" +
         "global.last_petal_memory += 1;\n" +
         "global.last_petal_horror = clamp(global.last_petal_memory + global.last_petal_kills, 0, 100);\n" +
@@ -109,7 +109,7 @@ foreach (UndertaleCode target in targets)
 
 if (queued == 0)
 {
-    ScriptMessage("SAFE MASTER V2 is already installed. Nothing was changed.");
+    ScriptMessage("SAFE MASTER V2 FIXED is already installed. Nothing was changed.");
     return;
 }
 
@@ -117,22 +117,14 @@ var result = imports.Import();
 
 if (!result.Successful)
 {
-    ScriptError("SAFE MASTER V2 aborted.\n\n" + result.PrintAllErrors(false));
+    ScriptError("SAFE MASTER V2 FIXED aborted.\n\n" + result.PrintAllErrors(false));
     return;
 }
 
 ScriptMessage(
-    "LAST PETAL SAFE MASTER V2 installed.\n\n" +
+    "LAST PETAL SAFE MASTER V2 FIXED installed.\n\n" +
     "Character Create events changed: " + queued + "\n\n" +
-    "Restored state systems:\n" +
-    "- adaptive memory\n" +
-    "- kill/route tracking\n" +
-    "- fear, hatred, horror phases\n" +
-    "- everyone-horrified state\n" +
-    "- Flowey scared state\n" +
-    "- Sans hostile/no-mercy state\n" +
-    "- Chara awareness/mood state\n" +
-    "- character reaction state\n\n" +
-    "The old Step hooks are intentionally NOT restored because they were responsible for the movement/sprite problems.\n\n" +
+    "Fixed the obj_sansbox undefined kills crash.\n" +
+    "No Step events, movement, dialogue rendering, sprites, or rooms were changed.\n\n" +
     "Back up data.win before saving."
 );
