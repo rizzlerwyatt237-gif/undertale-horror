@@ -1,8 +1,8 @@
 EnsureDataLoaded();
 
-// SAFE TEXT-AI FOUNDATION v2
-// Does not patch draw_text, dialogue renderers, Step events, movement,
-// or every string in the game.
+// SAFE TEXT AI FOUNDATION - FIXED
+// Only patches the existing SCR_GAMESTART assignment.
+// Does not touch draw_text, dialogue renderers, Step events, movement, or rooms.
 
 var gameStart = Data.Scripts.ByName("SCR_GAMESTART", true)?.Code as UndertaleCode;
 
@@ -14,16 +14,27 @@ if (gameStart == null)
 
 string existing = GetDecompiledText(gameStart);
 const string anchor = "global.debug = ";
+int anchorIndex = existing.IndexOf(anchor, StringComparison.Ordinal);
 
-if (!existing.Contains(anchor))
+if (anchorIndex < 0)
 {
     ScriptError("SAFE TEXT AI: expected SCR_GAMESTART anchor was not found. Nothing was changed.");
     return;
 }
 
-string safeState = @"
+// Keep the original debug value. We replace the complete assignment with
+// one valid GML statement followed by the AI state assignments.
+int semicolonIndex = existing.IndexOf(';', anchorIndex);
+if (semicolonIndex < 0)
+{
+    ScriptError("SAFE TEXT AI: could not find the end of the debug assignment. Nothing was changed.");
+    return;
+}
+
+string originalAssignment = existing.Substring(anchorIndex, semicolonIndex - anchorIndex + 1);
+string safeReplacement = originalAssignment + @"
+
 // LAST PETAL SAFE AI STATE
-// State only; no text renderer is modified.
 global.last_petal_ai_memory = 0;
 global.last_petal_ai_turn = 0;
 global.last_petal_ai_mood = 0;
@@ -38,22 +49,14 @@ UndertaleModLib.Compiler.CodeImportGroup importGroup = new(Data)
     MainThreadAction = MainThreadAction
 };
 
-// IMPORTANT: put the state BEFORE the existing assignment.
-// Replacing "global.debug = " with "state + global.debug = " keeps the
-// original right-hand side intact and therefore produces valid GML.
-importGroup.QueueFindReplace(
-    gameStart,
-    anchor,
-    safeState + "\nglobal.debug = "
-);
+importGroup.QueueFindReplace(gameStart, originalAssignment, safeReplacement);
 
 try
 {
     importGroup.Import();
     ChangeSelection(gameStart);
     ScriptMessage("SAFE TEXT AI installed successfully.");
-    ScriptMessage("Only SCR_GAMESTART was patched.");
-    ScriptMessage("No dialogue renderer, draw_text, Step event, movement code, or global text replacement was modified.");
+    ScriptMessage("Only SCR_GAMESTART was changed; the text renderer, Step events, movement, and room code were not modified.");
 }
 catch (Exception ex)
 {
