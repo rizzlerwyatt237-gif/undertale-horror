@@ -1,8 +1,8 @@
 using System;
 using System.Linq;
 
-// UNDERTALE: FLOWEY // LAST PETAL EXPANSION - COMPATIBLE
-// Uses the current UndertaleModTool CodeImportGroup API instead of ReplaceGML.
+// UNDERTALE: FLOWEY // LAST PETAL EXPANSION - FIXED
+// Uses the current UndertaleModTool CodeImportGroup API.
 // Offline/scripted adaptive horror. Keep a backup of data.win.
 
 void Log(string text)
@@ -47,7 +47,7 @@ void Prepend(UndertaleModLib.Models.UndertaleCode code, string injected)
     ImportCode(code, "// LAST PETAL COMPAT HOOK\n" + injected + "\n\n" + original);
 }
 
-UndertaleModLib.Models.UndertaleCode EnsureScript(string name, string gml)
+UndertaleModLib.Models.UndertaleCode EnsureLastPetalScript(string name, string gml)
 {
     var code = Data.Code.FirstOrDefault(c => c?.Name?.Content == name);
     if (code != null) return code;
@@ -58,8 +58,7 @@ UndertaleModLib.Models.UndertaleCode EnsureScript(string name, string gml)
     return code;
 }
 
-// Adaptive director.
-var director = EnsureScript("gml_Script_last_petal_expansion_tick", @"
+var director = EnsureLastPetalScript("gml_Script_last_petal_expansion_tick", @"
 if (!variable_global_exists(""last_petal_horror"")) global.last_petal_horror = 0;
 if (!variable_global_exists(""last_petal_memory"")) global.last_petal_memory = 0;
 if (!variable_global_exists(""last_petal_kills"")) global.last_petal_kills = 0;
@@ -81,7 +80,7 @@ global.last_petal_tension = clamp(global.last_petal_horror * 5, 0, 100);
 
 global.last_petal_fakeout = 0;
 if (global.last_petal_phase >= 1 && irandom(179) == 0) global.last_petal_fakeout = 1;
-", Data);
+");
 
 if (director == null)
 {
@@ -89,12 +88,12 @@ if (director == null)
     return;
 }
 
-var phase = EnsureScript("gml_Script_last_petal_phase", @"
+var phase = EnsureLastPetalScript("gml_Script_last_petal_phase", @"
 if (!variable_global_exists(""last_petal_phase"")) global.last_petal_phase = 0;
 return clamp(global.last_petal_phase, 0, 3);
 ");
 
-var tactic = EnsureScript("gml_Script_last_petal_tactic", @"
+var tactic = EnsureLastPetalScript("gml_Script_last_petal_tactic", @"
 if (!variable_global_exists(""last_petal_phase"")) global.last_petal_phase = 0;
 if (global.last_petal_phase <= 0) return ""observe"";
 if (global.last_petal_phase == 1) return choose(""observe"", ""fakeout"", ""pressure"");
@@ -102,12 +101,11 @@ if (global.last_petal_phase == 2) return choose(""fakeout"", ""pressure"", ""rel
 return choose(""pressure"", ""relentless"", ""ambush"");
 ");
 
-var pressure = EnsureScript("gml_Script_last_petal_encounter_pressure", @"
+var pressure = EnsureLastPetalScript("gml_Script_last_petal_encounter_pressure", @"
 if (!variable_global_exists(""last_petal_horror"")) global.last_petal_horror = 0;
 return clamp(global.last_petal_horror, 0, 20);
 ");
 
-// Flowey remembers and reacts, but does not become the attacker.
 string floweyCreate = FindCodeName("flowey", "Create_0");
 string floweyStep = FindCodeName("flowey", "Step_0");
 
@@ -139,7 +137,6 @@ else
     Log("Flowey Step event was not found in this Undertale build.");
 }
 
-// Sans receives the adaptive state for compatible encounter code.
 string sansCreate = FindCodeName("sans", "Create_0");
 string sansStep = FindCodeName("sans", "Step_0");
 
@@ -168,4 +165,4 @@ else
     Log("Sans Step event was not found in this Undertale build.");
 }
 
-ScriptMessage("FLOWEY // LAST PETAL EXPANSION installed successfully.\n\nThis version uses CodeImportGroup, which is the current UndertaleModTool import API.\n\nAdded adaptive phases, tension, fake-outs, Flowey reactions, and Sans state.\n\nIf another error appears, send me its screenshot and I will fix the script for your exact UMT build.\n");
+ScriptMessage("FLOWEY // LAST PETAL EXPANSION installed successfully.\n\nThis fixed version avoids the EnsureScript name conflict.\n\nAdded adaptive phases, tension, fake-outs, Flowey reactions, and Sans state.\n\nIf another error appears, send me its screenshot and I will fix the script for your exact UMT build.\n");
