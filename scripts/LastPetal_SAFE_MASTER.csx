@@ -5,9 +5,8 @@ using UndertaleModLib.Compiler;
 
 // LAST PETAL SAFE MASTER
 // Rebuild of the non-text horror systems.
-// IMPORTANT: this script does NOT modify Step events, movement, draw code,
-// dialogue rendering, sprites, rooms, or global string replacement.
-// It only appends small state variables to existing Create events.
+// This version deliberately avoids Step events, movement, draw code,
+// dialogue rendering, sprites, rooms, and global string replacement.
 
 EnsureDataLoaded();
 
@@ -69,8 +68,15 @@ foreach (UndertaleCode target in targets)
                    "if (!variable_global_exists(\"last_petal_hatred\")) global.last_petal_hatred = 0;\n" +
                    "if (!variable_global_exists(\"last_petal_flowey_mood\")) global.last_petal_flowey_mood = 0;\n" +
                    "if (!variable_global_exists(\"last_petal_sans_hostile\")) global.last_petal_sans_hostile = 0;\n" +
-                   "global.last_petal_memory += 1;\n" +
-                   "global.last_petal_tension = global.last_petal_kills;\n";
+                   "if (variable_global_exists(\"kills\")) global.last_petal_kills = global.kills;\n" +
+                   "global.last_petal_horror = global.last_petal_kills > 0;\n" +
+                   "global.last_petal_phase = (global.last_petal_kills >= 30) ? 4 : ((global.last_petal_kills >= 15) ? 3 : ((global.last_petal_kills >= 5) ? 2 : ((global.last_petal_kills >= 1) ? 1 : 0));\n" +
+                   "global.last_petal_tension = global.last_petal_kills;\n" +
+                   "global.last_petal_fear = global.last_petal_kills > 0;\n" +
+                   "global.last_petal_hatred = global.last_petal_kills >= 15;\n" +
+                   "global.last_petal_flowey_mood = global.last_petal_kills > 0 ? -1 : 0;\n" +
+                   "global.last_petal_sans_hostile = global.last_petal_kills > 0 ? 1 : 0;\n" +
+                   "global.last_petal_memory += 1;\n";
 
     imports.QueueReplace(target, existing + patch);
     queued++;
@@ -93,7 +99,7 @@ if (!result.Successful)
 ScriptMessage(
     "LAST PETAL SAFE MASTER installed.\n\n" +
     "Create events changed: " + queued + "\n\n" +
-    "Rebuilt systems: shared memory, kill tracking state, route state, fear, hatred, tension, Flowey mood, and Sans hostility state.\n\n" +
+    "Rebuilt: shared memory, kill/route state, horror phases, tension, fear, hatred, Flowey mood, and Sans hostility state.\n\n" +
     "NOT touched: Step events, movement, draw code, dialogue renderer, sprites, rooms, or global text replacement.\n\n" +
     "Save a backup of data.win before testing."
 );
