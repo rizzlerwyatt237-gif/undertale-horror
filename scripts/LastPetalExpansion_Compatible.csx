@@ -1,75 +1,73 @@
 using System;
 using System.Linq;
+using UndertaleModLib.Models;
+using UndertaleModLib.Compiler;
 
-// UNDERTALE: FLOWEY // LAST PETAL EXPANSION - FIXED
-// Uses the current UndertaleModTool CodeImportGroup API.
-// Offline/scripted adaptive horror. Keep a backup of data.win.
+// FLOWEY // LAST PETAL
+// Compatibility-first version: patches existing events only.
+// It deliberately does not create new scripts or use EnsureScript.
+
+EnsureDataLoaded();
 
 void Log(string text)
 {
     Console.WriteLine("[LAST PETAL] " + text);
 }
 
-string FindCodeName(string a, string b)
+UndertaleCode FindEvent(string objectPart, string eventPart)
 {
-    var code = Data.Code.FirstOrDefault(c => c?.Name?.Content != null &&
-        c.Name.Content.IndexOf(a, StringComparison.OrdinalIgnoreCase) >= 0 &&
-        c.Name.Content.IndexOf(b, StringComparison.OrdinalIgnoreCase) >= 0);
-    return code?.Name?.Content;
+    return Data.Code.FirstOrDefault(c => c?.Name?.Content != null &&
+        c.Name.Content.IndexOf(objectPart, StringComparison.OrdinalIgnoreCase) >= 0 &&
+        c.Name.Content.IndexOf(eventPart, StringComparison.OrdinalIgnoreCase) >= 0);
 }
 
-string Decompile(UndertaleModLib.Models.UndertaleCode code)
+bool PatchEvent(UndertaleCode code, string injected)
 {
-    return GetDecompiledText(code);
-}
+    if (code == null)
+        return false;
 
-bool ImportCode(UndertaleModLib.Models.UndertaleCode code, string gml)
-{
-    var group = new UndertaleModLib.Compiler.CodeImportGroup(Data)
+    string original = GetDecompiledText(code);
+    if (original.Contains("LAST PETAL 2026 HOOK"))
+    {
+        Log("Already patched: " + code.Name.Content);
+        return true;
+    }
+
+    var imports = new CodeImportGroup(Data)
     {
         MainThreadAction = MainThreadAction
     };
-    group.QueueReplace(code, gml);
-    var result = group.Import();
+
+    imports.QueueReplace(code,
+        "// LAST PETAL 2026 HOOK\n" + injected + "\n\n" + original);
+
+    var result = imports.Import();
     if (!result.Successful)
     {
-        ScriptMessage("GML import failed:\n" + result.PrintAllErrors(false));
+        ScriptError("Could not patch " + code.Name.Content + ":\n" + result.PrintAllErrors(false));
         return false;
     }
+
+    Log("Patched: " + code.Name.Content);
     return true;
 }
 
-void Prepend(UndertaleModLib.Models.UndertaleCode code, string injected)
-{
-    if (code == null) return;
-    string original = Decompile(code);
-    if (original.Contains("LAST PETAL COMPAT HOOK")) return;
-    ImportCode(code, "// LAST PETAL COMPAT HOOK\n" + injected + "\n\n" + original);
-}
+var floweyCreate = FindEvent("flowey", "Create_0");
+var floweyStep = FindEvent("flowey", "Step_0");
+var sansCreate = FindEvent("sans", "Create_0");
+var sansStep = FindEvent("sans", "Step_0");
 
-UndertaleModLib.Models.UndertaleCode EnsureLastPetalScript(string name, string gml)
-{
-    var code = Data.Code.FirstOrDefault(c => c?.Name?.Content == name);
-    if (code != null) return code;
-
-    code = UndertaleModLib.Models.UndertaleCode.CreateEmptyEntry(Data, name);
-    Data.Code.Add(code);
-    if (!ImportCode(code, gml)) return null;
-    return code;
-}
-
-var director = EnsureLastPetalScript("gml_Script_last_petal_expansion_tick", @"
-if (!variable_global_exists(""last_petal_horror"")) global.last_petal_horror = 0;
+string floweyCreatePatch = @"
 if (!variable_global_exists(""last_petal_memory"")) global.last_petal_memory = 0;
 if (!variable_global_exists(""last_petal_kills"")) global.last_petal_kills = 0;
-if (!variable_global_exists(""last_petal_mercy"")) global.last_petal_mercy = 0;
+if (!variable_global_exists(""last_petal_horror"")) global.last_petal_horror = 0;
 if (!variable_global_exists(""last_petal_phase"")) global.last_petal_phase = 0;
 if (!variable_global_exists(""last_petal_tension"")) global.last_petal_tension = 0;
 if (!variable_global_exists(""last_petal_fakeout"")) global.last_petal_fakeout = 0;
 
+global.last_petal_memory = max(global.last_petal_memory, 1);
 if (variable_global_exists(""kills"")) global.last_petal_kills = max(global.last_petal_kills, kills);
 if (variable_global_exists(""killcount"")) global.last_petal_kills = max(global.last_petal_kills, killcount);
-if (global.last_petal_kills > 0) global.last_petal_memory = max(global.last_petal_memory, 2);
 
 global.last_petal_horror = clamp(global.last_petal_memory + global.last_petal_kills, 0, 20);
 global.last_petal_phase = 0;
@@ -77,92 +75,58 @@ if (global.last_petal_horror >= 5) global.last_petal_phase = 1;
 if (global.last_petal_horror >= 10) global.last_petal_phase = 2;
 if (global.last_petal_horror >= 15) global.last_petal_phase = 3;
 global.last_petal_tension = clamp(global.last_petal_horror * 5, 0, 100);
+global.last_petal_flowey_knows = true;
+";
+
+string floweyStepPatch = @"
+if (!variable_global_exists(""last_petal_horror"")) global.last_petal_horror = 0;
+if (!variable_global_exists(""last_petal_phase"")) global.last_petal_phase = 0;
+if (!variable_global_exists(""last_petal_fakeout"")) global.last_petal_fakeout = 0;
 
 global.last_petal_fakeout = 0;
 if (global.last_petal_phase >= 1 && irandom(179) == 0) global.last_petal_fakeout = 1;
-");
 
-if (director == null)
-{
-    ScriptMessage("Could not create the Last Petal director.");
-    return;
-}
+if (global.last_petal_phase >= 1 && irandom(120) == 0)
+    image_xscale = -image_xscale;
 
-var phase = EnsureLastPetalScript("gml_Script_last_petal_phase", @"
-if (!variable_global_exists(""last_petal_phase"")) global.last_petal_phase = 0;
-return clamp(global.last_petal_phase, 0, 3);
-");
+if (global.last_petal_phase >= 2 && irandom(150) == 0)
+    image_yscale = -abs(image_yscale);
 
-var tactic = EnsureLastPetalScript("gml_Script_last_petal_tactic", @"
-if (!variable_global_exists(""last_petal_phase"")) global.last_petal_phase = 0;
-if (global.last_petal_phase <= 0) return ""observe"";
-if (global.last_petal_phase == 1) return choose(""observe"", ""fakeout"", ""pressure"");
-if (global.last_petal_phase == 2) return choose(""fakeout"", ""pressure"", ""relentless"");
-return choose(""pressure"", ""relentless"", ""ambush"");
-");
+if (global.last_petal_phase >= 3 && irandom(180) == 0)
+    image_angle += choose(-3, 3, -6, 6);
 
-var pressure = EnsureLastPetalScript("gml_Script_last_petal_encounter_pressure", @"
-if (!variable_global_exists(""last_petal_horror"")) global.last_petal_horror = 0;
-return clamp(global.last_petal_horror, 0, 20);
-");
-
-string floweyCreate = FindCodeName("flowey", "Create_0");
-string floweyStep = FindCodeName("flowey", "Step_0");
-
-if (floweyCreate != null)
-{
-    Prepend(Data.Code.ByName(floweyCreate), @"
-if (!variable_global_exists(""last_petal_memory"")) global.last_petal_memory = 0;
-global.last_petal_memory = max(global.last_petal_memory, 1);
-global.last_petal_flowey_knows = true;
-last_petal_expansion_tick();
-");
-    Log("Flowey memory installed.");
-}
-
-if (floweyStep != null)
-{
-    Prepend(Data.Code.ByName(floweyStep), @"
-last_petal_expansion_tick();
-if (global.last_petal_phase >= 1 && irandom(89) == 0) image_xscale = -image_xscale;
-if (global.last_petal_phase >= 2 && irandom(59) == 0) image_yscale = -abs(image_yscale);
-if (global.last_petal_phase >= 3 && irandom(39) == 0) image_angle += choose(-3, 3, 6, -6);
 last_petal_flowey_phase = global.last_petal_phase;
+last_petal_flowey_tension = global.last_petal_tension;
 last_petal_flowey_fakeout = global.last_petal_fakeout;
-");
-    Log("Flowey reaction system installed.");
-}
-else
-{
-    Log("Flowey Step event was not found in this Undertale build.");
-}
+";
 
-string sansCreate = FindCodeName("sans", "Create_0");
-string sansStep = FindCodeName("sans", "Step_0");
-
-if (sansCreate != null)
-{
-    Prepend(Data.Code.ByName(sansCreate), @"
-last_petal_expansion_tick();
+string sansCreatePatch = @"
+if (!variable_global_exists(""last_petal_horror"")) global.last_petal_horror = 0;
+if (!variable_global_exists(""last_petal_phase"")) global.last_petal_phase = 0;
+if (!variable_global_exists(""last_petal_tension"")) global.last_petal_tension = 0;
 last_petal_sans_memory = global.last_petal_horror;
-");
-    Log("Sans memory installed.");
-}
+last_petal_sans_phase = global.last_petal_phase;
+";
 
-if (sansStep != null)
-{
-    Prepend(Data.Code.ByName(sansStep), @"
-last_petal_expansion_tick();
+string sansStepPatch = @"
+if (!variable_global_exists(""last_petal_horror"")) global.last_petal_horror = 0;
+if (!variable_global_exists(""last_petal_phase"")) global.last_petal_phase = 0;
+if (!variable_global_exists(""last_petal_tension"")) global.last_petal_tension = 0;
+
+last_petal_sans_memory = global.last_petal_horror;
 last_petal_sans_phase = global.last_petal_phase;
 last_petal_sans_tension = global.last_petal_tension;
-last_petal_sans_fakeout = global.last_petal_fakeout;
-last_petal_sans_tactic = last_petal_tactic();
-");
-    Log("Sans adaptive state installed.");
-}
-else
-{
-    Log("Sans Step event was not found in this Undertale build.");
-}
+last_petal_sans_pressure = choose(""observe"", ""fakeout"", ""pressure"");
+if (global.last_petal_phase >= 2)
+    last_petal_sans_pressure = choose(""fakeout"", ""pressure"", ""relentless"");
+if (global.last_petal_phase >= 3)
+    last_petal_sans_pressure = choose(""pressure"", ""relentless"", ""ambush"");
+";
 
-ScriptMessage("FLOWEY // LAST PETAL EXPANSION installed successfully.\n\nThis fixed version avoids the EnsureScript name conflict.\n\nAdded adaptive phases, tension, fake-outs, Flowey reactions, and Sans state.\n\nIf another error appears, send me its screenshot and I will fix the script for your exact UMT build.\n");
+int patched = 0;
+if (PatchEvent(floweyCreate, floweyCreatePatch)) patched++;
+if (PatchEvent(floweyStep, floweyStepPatch)) patched++;
+if (PatchEvent(sansCreate, sansCreatePatch)) patched++;
+if (PatchEvent(sansStep, sansStepPatch)) patched++;
+
+ScriptMessage("LAST PETAL compatibility patch finished.\n\nPatched existing Flowey/Sans events: " + patched + "\n\nThis version creates NO new scripts and contains NO EnsureScript helper, so it avoids the compile error you just got.\n\nMake a backup of data.win before saving.");
