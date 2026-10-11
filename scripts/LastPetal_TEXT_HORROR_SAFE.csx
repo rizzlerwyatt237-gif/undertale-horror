@@ -1,9 +1,8 @@
 EnsureDataLoaded();
 
-// SAFE TEXT-AI FOUNDATION
-// This script deliberately does NOT patch draw_text, dialogue renderers,
-// Step events, player movement, or every string in the game.
-// Those global patches caused the room-to-room text corruption.
+// SAFE TEXT-AI FOUNDATION v2
+// Does not patch draw_text, dialogue renderers, Step events, movement,
+// or every string in the game.
 
 var gameStart = Data.Scripts.ByName("SCR_GAMESTART", true)?.Code as UndertaleCode;
 
@@ -14,12 +13,9 @@ if (gameStart == null)
 }
 
 string existing = GetDecompiledText(gameStart);
-
-// Use a real, known Undertale anchor instead of an empty-string replacement.
-// If the anchor is missing, abort without changing data.win.
 const string anchor = "global.debug = ";
 
-if (!existing.Contains(anchor, StringComparison.Ordinal))
+if (!existing.Contains(anchor))
 {
     ScriptError("SAFE TEXT AI: expected SCR_GAMESTART anchor was not found. Nothing was changed.");
     return;
@@ -27,7 +23,7 @@ if (!existing.Contains(anchor, StringComparison.Ordinal))
 
 string safeState = @"
 // LAST PETAL SAFE AI STATE
-// Memory is state only; no text renderer is modified here.
+// State only; no text renderer is modified.
 global.last_petal_ai_memory = 0;
 global.last_petal_ai_turn = 0;
 global.last_petal_ai_mood = 0;
@@ -42,21 +38,22 @@ UndertaleModLib.Compiler.CodeImportGroup importGroup = new(Data)
     MainThreadAction = MainThreadAction
 };
 
-// Insert only after the exact existing debug assignment.
-// Nothing else in the game is searched or rewritten.
+// IMPORTANT: put the state BEFORE the existing assignment.
+// Replacing "global.debug = " with "state + global.debug = " keeps the
+// original right-hand side intact and therefore produces valid GML.
 importGroup.QueueFindReplace(
     gameStart,
     anchor,
-    anchor + safeState + "\n"
+    safeState + "\nglobal.debug = "
 );
 
 try
 {
     importGroup.Import();
     ChangeSelection(gameStart);
-    ScriptMessage("SAFE TEXT AI installed.");
-    ScriptMessage("No dialogue renderer, draw_text function, Step event, movement code, or global text replacement was modified.");
-    ScriptMessage("If the next room's text is normal, this foundation is safe to build on.");
+    ScriptMessage("SAFE TEXT AI installed successfully.");
+    ScriptMessage("Only SCR_GAMESTART was patched.");
+    ScriptMessage("No dialogue renderer, draw_text, Step event, movement code, or global text replacement was modified.");
 }
 catch (Exception ex)
 {
