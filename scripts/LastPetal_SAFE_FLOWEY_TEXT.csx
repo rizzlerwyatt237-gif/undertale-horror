@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using UndertaleModLib.Models;
 using UndertaleModLib.Compiler;
 
@@ -9,17 +10,28 @@ using UndertaleModLib.Compiler;
 
 EnsureDataLoaded();
 
-var candidates = Data.Code.FindAll(c => c?.Name?.Content != null &&
-    c.Name.Content.IndexOf("flowey", StringComparison.OrdinalIgnoreCase) >= 0 &&
-    c.Name.Content.EndsWith("Create_0", StringComparison.OrdinalIgnoreCase));
+UndertaleCode target = null;
 
-if (candidates.Count == 0)
+foreach (var code in Data.Code)
+{
+    if (code == null || code.Name == null || code.Name.Content == null)
+        continue;
+
+    string name = code.Name.Content;
+    if (name.IndexOf("flowey", StringComparison.OrdinalIgnoreCase) >= 0 &&
+        name.EndsWith("Create_0", StringComparison.OrdinalIgnoreCase))
+    {
+        target = code;
+        break;
+    }
+}
+
+if (target == null)
 {
     ScriptError("SAFE FLOWEY TEXT: no existing Flowey Create event was found. Nothing was changed.");
     return;
 }
 
-var target = candidates[0];
 string existing = GetDecompiledText(target);
 const string marker = "// LAST PETAL SAFE FLOWEY TEXT STATE";
 
@@ -32,9 +44,9 @@ if (existing.Contains(marker, StringComparison.Ordinal))
 string patch = @"
 
 // LAST PETAL SAFE FLOWEY TEXT STATE
-if (!variable_global_exists(""last_petal_memory"")) global.last_petal_memory = 0;
-if (!variable_global_exists(""last_petal_flowey_mood"")) global.last_petal_flowey_mood = 0;
-if (!variable_global_exists(""last_petal_flowey_seen"")) global.last_petal_flowey_seen = 0;
+if (!variable_global_exists(\"last_petal_memory\")) global.last_petal_memory = 0;
+if (!variable_global_exists(\"last_petal_flowey_mood\")) global.last_petal_flowey_mood = 0;
+if (!variable_global_exists(\"last_petal_flowey_seen\")) global.last_petal_flowey_seen = 0;
 global.last_petal_flowey_seen += 1;
 ";
 
