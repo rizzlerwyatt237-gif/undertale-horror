@@ -1,13 +1,13 @@
-// UNDERTALE HORROR — ACTUAL DIALOGUE SYSTEM — ALL TEXT
-// Targets the English text-data script instead of blindly editing Data.Strings.
-// It discovers UndertaleString references used by gml_Script_textdata_en.
-// Every dialogue-looking string referenced there gets a visible [HORROR] marker.
-// This is intentionally a SAFE TEST: no GML is compiled, no movement/rooms/sprites are touched.
+// UNDERTALE HORROR — ACTUAL DIALOGUE SYSTEM — ALL TEXT V2
+// Targets the actual English text-data script instead of blindly editing Data.Strings.
+// IMPORTANT: UndertaleInstruction string operands are stored through ValueString.Resource.
+// The old reflection-only version could miss those resource wrappers.
+// This version collects every string operand actually used by gml_Script_textdata_en.
+// SAFE TEST: no GML is compiled; movement, rooms, sprites, and attacks are untouched.
 // BACK UP data.win before running.
 
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using UndertaleModLib.Models;
 
 EnsureDataLoaded();
@@ -24,39 +24,31 @@ foreach (UndertaleCode code in Data.Code)
 
 if (textData == null)
 {
-    ScriptError("Could not find gml_Script_textdata_en. This script expects the normal English Undertale text-data system.");
+    ScriptError("Could not find gml_Script_textdata_en.");
     return;
 }
 
 var found = new HashSet<UndertaleString>();
 
-// Walk instruction properties and collect actual UndertaleString operands.
-// Reflection makes this tolerant of UMT versions whose instruction operand
-// property names differ.
-foreach (var instruction in textData.Instructions)
+// UMT stores a string Push operand as an UndertaleResourceById wrapper
+// in instruction.ValueString, with the actual UndertaleString in .Resource.
+foreach (UndertaleInstruction instruction in textData.Instructions)
 {
-    Type t = instruction.GetType();
+    if (instruction == null)
+        continue;
 
-    foreach (PropertyInfo p in t.GetProperties(BindingFlags.Instance | BindingFlags.Public))
-    {
-        if (!p.CanRead)
-            continue;
+    if (instruction.Kind != UndertaleInstruction.Opcode.Push)
+        continue;
 
-        object value = null;
-        try { value = p.GetValue(instruction); } catch { }
+    if (instruction.Type1 != UndertaleInstruction.DataType.String)
+        continue;
 
-        if (value is UndertaleString s)
-            found.Add(s);
-    }
+    if (instruction.ValueString == null)
+        continue;
 
-    foreach (FieldInfo f in t.GetFields(BindingFlags.Instance | BindingFlags.Public))
-    {
-        object value = null;
-        try { value = f.GetValue(instruction); } catch { }
-
-        if (value is UndertaleString s)
-            found.Add(s);
-    }
+    UndertaleString str = instruction.ValueString.Resource;
+    if (str != null)
+        found.Add(str);
 }
 
 int targeted = 0;
@@ -69,31 +61,15 @@ foreach (UndertaleString str in found)
 
     string original = str.Content;
 
-    // Actual Undertale dialogue normally contains a speaker/text marker,
-    // control codes, or the dialogue terminator. Avoid changing IDs,
-    // function names, and other internal text-data values.
-    bool looksLikeDialogue =
-        original.Contains("/%%") ||
-        original.Contains("/ %") ||
-        original.StartsWith("*") ||
-        original.StartsWith("\\W") ||
-        original.StartsWith("\\E") ||
-        original.StartsWith("\\F") ||
-        original.Contains("* ") ||
-        original.Contains("/\n") ||
-        original.Contains("&") ||
-        original.Contains("^");
-
-    if (!looksLikeDialogue)
+    // Since these strings came directly from the English text-data script,
+    // do not apply the old heuristic that rejected many valid dialogue entries.
+    // We only skip obviously non-text bookkeeping strings.
+    if (original == "[HORROR]" || original.Contains("[HORROR]"))
         continue;
 
     targeted++;
 
-    // Do not stack the marker if the script is run twice.
-    if (original.Contains("[HORROR]"))
-        continue;
-
-    // Preserve leading Undertale control codes and insert the marker after them.
+    // Put the marker after leading Undertale backslash control codes.
     int insertAt = 0;
     while (insertAt + 1 < original.Length && original[insertAt] == '\\')
     {
@@ -107,17 +83,18 @@ foreach (UndertaleString str in found)
 }
 
 ScriptMessage(
-    "===== ACTUAL UNDERTALE DIALOGUE SYSTEM — ALL TEXT =====\n\n" +
+    "===== ACTUAL UNDERTALE DIALOGUE SYSTEM — ALL TEXT V2 =====\n\n" +
     "Target: gml_Script_textdata_en\n" +
-    "Actual dialogue strings found: " + found.Count + "\n" +
-    "Dialogue entries targeted: " + targeted + "\n" +
-    "Dialogue entries changed: " + changed + "\n\n" +
+    "String operands found: " + found.Count + "\n" +
+    "Text-data entries targeted: " + targeted + "\n" +
+    "Text-data entries changed: " + changed + "\n\n" +
+    "String operand source: ValueString.Resource\n" +
     "GML compiler: NOT USED\n" +
     "Player movement: NOT MODIFIED\n" +
     "Rooms: NOT MODIFIED\n" +
     "Sprites: NOT MODIFIED\n" +
     "Attacks: NOT MODIFIED\n\n" +
-    "If the game shows [HORROR] in dialogue, we have successfully reached\n" +
-    "Undertale's real English dialogue system.\n" +
+    "If [HORROR] appears in Undertale dialogue, this confirms the actual\n" +
+    "English text-data system is being modified.\n" +
     "===================================================="
 );
