@@ -1,7 +1,6 @@
 // DETERMINED UNDYNE — MELTING BOSS
 // Safe scope: exact Undyne object events only.
-// Does NOT touch player movement, rooms, global dialogue rendering, or Sans/Flowey.
-// Uses UMT CodeImportGroup to prepend behavior to Undyne's existing events.
+// Does NOT touch player movement, rooms, dialogue rendering, or Sans/Flowey.
 
 using System;
 using UndertaleModLib.Compiler;
@@ -33,7 +32,6 @@ if (!variable_global_exists(\"determined_undyne_melt\")) global.determined_undyn
 if (!variable_global_exists(\"determined_undyne_timer\")) global.determined_undyne_timer = 0;
 if (!variable_global_exists(\"determined_undyne_attack_scale\")) global.determined_undyne_attack_scale = 1.35;
 
-// Start the fight in the determined state.
 undyne_determined = 1;
 undyne_melt_phase = 0;
 undyne_melt_timer = 0;
@@ -45,18 +43,24 @@ if (stepCode != null)
 {
     string stepPatch = @"
 // DETERMINED UNDYNE MELT PHASES
-// Visual-only transformation: no player input or player movement is changed.
+// Visual-only transformation. Player movement is untouched.
 if (variable_global_exists(\"determined_undyne\") && global.determined_undyne == 1)
 {
     global.determined_undyne_timer += 1;
     undyne_melt_timer += 1;
 
-    // Four escalating visual phases.
     if (undyne_melt_timer >= 180 && undyne_melt_phase < 1) undyne_melt_phase = 1;
     if (undyne_melt_timer >= 360 && undyne_melt_phase < 2) undyne_melt_phase = 2;
     if (undyne_melt_timer >= 540 && undyne_melt_phase < 3) undyne_melt_phase = 3;
 
-    if (undyne_melt_phase == 1)
+    if (undyne_melt_phase == 0)
+    {
+        image_alpha = 1;
+        image_xscale = 1;
+        image_yscale = 1;
+        image_angle = 0;
+    }
+    else if (undyne_melt_phase == 1)
     {
         image_xscale = 1.03 + sin(undyne_melt_timer / 12) * 0.03;
         image_yscale = 0.97;
@@ -69,7 +73,7 @@ if (variable_global_exists(\"determined_undyne\") && global.determined_undyne ==
         image_angle = sin(undyne_melt_timer / 11) * 4;
         image_alpha = 0.94;
     }
-    else if (undyne_melt_phase >= 3)
+    else
     {
         image_xscale = 1.14 + sin(undyne_melt_timer / 7) * 0.09;
         image_yscale = 0.80 + sin(undyne_melt_timer / 10) * 0.07;
@@ -84,4 +88,4 @@ if (variable_global_exists(\"determined_undyne\") && global.determined_undyne ==
 
 importGroup.Import();
 
-ScriptMessage("Determined Undyne installed. She now has escalating non-graphic melting visual phases and a 1.35x difficulty state. No player movement code was modified.");
+ScriptMessage("Determined Undyne installed: escalating non-graphic visual phases and a 1.35x difficulty state. Player movement code was not modified.");
