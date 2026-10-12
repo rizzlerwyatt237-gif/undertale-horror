@@ -5,18 +5,10 @@ using UndertaleModLib.Models;
 using UndertaleModLib.Compiler;
 
 // ULTIMATE HORROR MASTER
-// Combines the compatible horror systems into ONE UMT script.
-//
-// Included:
-// - Shared horror state / player-memory flags
-// - Flowey ally + resurrection state on existing Flowey Create events
-// - Flowey/Sans/Toriel/Undyne/Asgore horror dialogue replacements
-// - Determined Undyne visual instability phases
-// - No player Step hook
-// - No player movement modification
-// - Safe to run again: markers prevent duplicate patches
-//
-// IMPORTANT: BACK UP data.win before running this script.
+// Shared horror state, Flowey ally state, horror text, Sans state,
+// Determined Undyne visual phases, and an opening AI credit screen.
+// Player movement is not modified.
+// BACK UP data.win before running.
 
 EnsureDataLoaded();
 
@@ -30,19 +22,21 @@ int queued = 0;
 int textChanged = 0;
 int floweyPatched = 0;
 int undynePatched = 0;
+int sansCreateCount = 0;
 
 // ============================================================
-// 1. SHARED HORROR STATE
+// 1. STARTUP CREDIT + SHARED HORROR STATE
 // ============================================================
-
 var gameStart = Data.Scripts.ByName("SCR_GAMESTART", true)?.Code as UndertaleCode;
 if (gameStart != null)
 {
     string existing = GetDecompiledText(gameStart);
 
-    if (!existing.Contains("ULTIMATE_HORROR_MASTER_STATE", StringComparison.Ordinal))
+    if (!existing.Contains("ULTIMATE_HORROR_MASTER_START", StringComparison.Ordinal))
     {
         string patch =
+            "// ULTIMATE_HORROR_MASTER_START\n" +
+            "show_message(\"UNDERTALE HORROR\\n\\nMOD MADE BY AI\\n\\nPress OK to continue.\");\n" +
             "// ULTIMATE_HORROR_MASTER_STATE\n" +
             "if (!variable_global_exists(\"horror_phase\")) global.horror_phase = 0;\n" +
             "if (!variable_global_exists(\"horror_tension\")) global.horror_tension = 0;\n" +
@@ -61,13 +55,15 @@ if (gameStart != null)
         queued++;
     }
 }
+else
+{
+    ScriptError("Could not find SCR_GAMESTART. The opening AI credit was not installed.");
+    return;
+}
 
 // ============================================================
-// 2. FLOWEY RESURRECTION / ALLY
+// 2. FLOWEY ALLY / RETURN STATE
 // ============================================================
-// We do NOT invent a new object. Instead, every existing Flowey
-// Create event gets the ally state when that Flowey instance appears.
-
 var floweyCreates = Data.Code
     .Where(c => c?.Name?.Content != null &&
                 c.Name.Content.IndexOf("flowey", StringComparison.OrdinalIgnoreCase) >= 0 &&
@@ -77,7 +73,6 @@ var floweyCreates = Data.Code
 foreach (UndertaleCode floweyCreate in floweyCreates)
 {
     string existing = GetDecompiledText(floweyCreate);
-
     if (existing.Contains("ULTIMATE_FLOWEY_ALLY", StringComparison.Ordinal))
         continue;
 
@@ -99,14 +94,12 @@ foreach (UndertaleCode floweyCreate in floweyCreates)
 }
 
 // ============================================================
-// 3. DETERMINED UNDYNE CREATE
+// 3. DETERMINED UNDYNE
 // ============================================================
-
 var undyneCreate = Data.Code.ByName("gml_Object_obj_undyne_Create_0");
 if (undyneCreate != null)
 {
     string existing = GetDecompiledText(undyneCreate);
-
     if (!existing.Contains("ULTIMATE_UNDYNE_CREATE", StringComparison.Ordinal))
     {
         string patch =
@@ -119,24 +112,16 @@ if (undyneCreate != null)
             "undyne_base_xscale = image_xscale;\n" +
             "undyne_base_yscale = image_yscale;\n" +
             "undyne_base_alpha = image_alpha;\n";
-
         importGroup.QueueReplace(undyneCreate, patch + "\n" + existing);
         undynePatched++;
         queued++;
     }
 }
 
-// ============================================================
-// 4. DETERMINED UNDYNE VISUAL PHASES
-// ============================================================
-// This affects only Undyne's own visual state. It never touches
-// the player's Step event or movement.
-
 var undyneStep = Data.Code.ByName("gml_Object_obj_undyne_Step_0");
 if (undyneStep != null)
 {
     string existing = GetDecompiledText(undyneStep);
-
     if (!existing.Contains("ULTIMATE_UNDYNE_MELT", StringComparison.Ordinal))
     {
         string patch =
@@ -169,7 +154,6 @@ if (undyneStep != null)
             "        image_alpha = undyne_base_alpha * 0.88;\n" +
             "    }\n" +
             "}\n";
-
         importGroup.QueueReplace(undyneStep, patch + "\n" + existing);
         undynePatched++;
         queued++;
@@ -177,12 +161,8 @@ if (undyneStep != null)
 }
 
 // ============================================================
-// 5. HORROR TEXT
+// 4. HORROR TEXT
 // ============================================================
-// Direct string-resource edits. This avoids recompiling the text
-// renderer and therefore avoids the previous gml_Script_textdata
-// problems.
-
 var replacements = new Dictionary<string, string>(StringComparer.Ordinal)
 {
     { "Howdy! I'm FLOWEY. FLOWEY the FLOWER!", "Oh. It's YOU.\nGood. You're here.\nI've been waiting for you.\nThis time, I'm on your side." },
@@ -202,9 +182,7 @@ var replacements = new Dictionary<string, string>(StringComparer.Ordinal)
 
 foreach (var str in Data.Strings)
 {
-    if (str == null || string.IsNullOrEmpty(str.Content))
-        continue;
-
+    if (str == null || string.IsNullOrEmpty(str.Content)) continue;
     if (replacements.TryGetValue(str.Content, out string replacement))
     {
         str.Content = replacement;
@@ -213,23 +191,16 @@ foreach (var str in Data.Strings)
 }
 
 // ============================================================
-// 6. FLOWEY/SANS HORROR STATE DISCOVERY
+// 5. SANS HORROR STATE
 // ============================================================
-// We don't blindly replace movement or Step code for these
-// characters. Their hostile state is exposed globally so other
-// compatible mod code can react without breaking movement.
-
-int sansCreateCount = 0;
 foreach (UndertaleCode code in Data.Code.Where(c => c?.Name?.Content != null))
 {
     string name = code.Name.Content;
     if (name.IndexOf("sans", StringComparison.OrdinalIgnoreCase) < 0 ||
-        !name.EndsWith("Create_0", StringComparison.OrdinalIgnoreCase))
-        continue;
+        !name.EndsWith("Create_0", StringComparison.OrdinalIgnoreCase)) continue;
 
     string existing = GetDecompiledText(code);
-    if (existing.Contains("ULTIMATE_SANS_STATE", StringComparison.Ordinal))
-        continue;
+    if (existing.Contains("ULTIMATE_SANS_STATE", StringComparison.Ordinal)) continue;
 
     string patch =
         "// ULTIMATE_SANS_STATE\n" +
@@ -242,12 +213,7 @@ foreach (UndertaleCode code in Data.Code.Where(c => c?.Name?.Content != null))
     queued++;
 }
 
-// ============================================================
-// APPLY GML CHANGES
-// ============================================================
-
 var result = importGroup.Import();
-
 if (!result.Successful)
 {
     ScriptError("ULTIMATE HORROR MASTER aborted:\n\n" + result.PrintAllErrors(false));
@@ -257,15 +223,13 @@ if (!result.Successful)
 ScriptMessage(
     "===== ULTIMATE HORROR MASTER =====\n\n" +
     "Installed successfully.\n\n" +
+    "Opening credit: MOD MADE BY AI\n" +
     "GML events queued: " + queued + "\n" +
     "Flowey Create events patched: " + floweyPatched + "\n" +
     "Undyne systems patched: " + undynePatched + "\n" +
     "Sans Create events patched: " + sansCreateCount + "\n" +
     "Horror strings changed: " + textChanged + "\n\n" +
-    "Flowey ally state: ON\n" +
-    "Shared horror state: ON\n" +
-    "Determined Undyne phases: ON if obj_undyne exists\n" +
-    "Player movement: NOT MODIFIED\n\n" +
+    "Player movement: NOT MODIFIED\n" +
     "BACK UP data.win before saving.\n" +
     "================================="
 );
